@@ -12,7 +12,8 @@ method_styles = {
     'GPHedge_abe': {'color': color_palette[0]},
     'GPHedge_abe_least_risk': {'color': color_palette[1]},
     'GPHedge_bandit': {'color': color_palette[2]},
-    'GPHedge_random': {'color': color_palette[3]}
+    'GPHedge_random': {'color': color_palette[3]},
+    'base': {'color': color_palette[4]}
     # Add more styles if needed
 }
 
