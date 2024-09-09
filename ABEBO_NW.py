@@ -42,26 +42,26 @@ class ABEBO:
         self.use_least_risk = use_least_risk
 
         self.d = len(acquisition_functions)
-        self.r0 = 0.5 * torch.ones(self.d, dtype=self.dtype, device=self.device)
-        self.T0 = 0.25 * torch.eye(self.d, dtype=self.dtype, device=self.device)
-        self.kappa0 = 1.0
-        self.nu0 = self.d
+        self.r = 0.5 * torch.ones(self.d, dtype=self.dtype, device=self.device)
+        self.T = 0.25 * torch.eye(self.d, dtype=self.dtype, device=self.device)
+        self.kappa = 1.0
+        self.nu = self.d
 
-    def student_t_posterior(self, losses):
-        m = len(losses)
-        losses_mean = torch.mean(losses)
+    def student_t_posterior(self, new_loss):
+        # self.kappa += 1
+        self.nu += 1
+        kappa_t_1 = self.kappa
+        kappa_t = self.kappa + 1
+        self.r = (kappa_t_1 * self.r + new_loss) / kappa_t
         
-        kappa_m = self.kappa0 + m
-        nu_m = self.nu0 + m
+        diff = new_loss - self.r
+        self.T += torch.outer(diff, diff) * (kappa_t_1 / kappa_t)
         
-        r_m = (self.kappa0 * self.r0 + m * losses_mean) / kappa_m
-        
-        S = torch.cov(losses.T) if m > 1 else torch.var(losses).unsqueeze(0).unsqueeze(0)
-        T_m = self.T0 + m * S + (self.kappa0 * m / kappa_m) * torch.outer(losses_mean - self.r0, losses_mean - self.r0)
-        
-        dof = float(nu_m - self.d + 1)  # Convert to scalar
-        loc = r_m
-        scale = T_m / (kappa_m * dof)
+        dof = float(self.nu - self.d + 1) 
+        loc = self.r
+        scale = self.T / (self.kappa * dof)
+
+        self.kappa = kappa_t
         
         return dof, loc, scale
 
@@ -113,7 +113,6 @@ class ABEBO:
         loc_np = loc.cpu().detach().numpy()
         scale_np = scale.cpu().detach().numpy()
         
-        # Generate samples from the multivariate t-distribution
         risk_samples = multivariate_t.rvs(df=dof, loc=loc_np, shape=scale_np, size=n_samples)
         risk_samples = torch.tensor(risk_samples, dtype=self.dtype, device=self.device)
         
@@ -259,7 +258,11 @@ def bayesian_optimization(args):
         gap_metrics.append(gap_metric(best_init_y, best_train_Y, true_max))
         simple_regrets.append(true_max - best_train_Y)
         cumulative_regrets.append(cumulative_regrets[-1] + (true_max - best_train_Y))
-        chosen_acq_functions.append(args.acquisition[chosen_acq_index] if not args.use_abe else 'ABE')
+        chosen_acq_functions.append(
+            args.acquisition[chosen_acq_index] if args.use_abe and args.use_least_risk else
+            'ABE' if args.use_abe else
+            args.acquisition[chosen_acq_index]
+        )
         kernel_names.append(args.kernel)
 
         posterior_mean = model.posterior(new_candidates_normalized).mean
@@ -314,13 +317,13 @@ if __name__ == "__main__":
 
     # Convert to numpy array and save
     all_results_np = np.array(all_results, dtype=object)
-    os.makedirs(f"./Results_abe_25", exist_ok=True)
+    os.makedirs(f"./Results_abe_test", exist_ok=True)
     
     if args.use_abe:
         filename = f"GPHedge_abe{'_least_risk' if args.use_least_risk else ''}.npy"
     else:
         filename = f"GPHedge_{args.acq_weight}.npy"
     
-    np.save(f"./Results_abe_25/{args.function}_{filename}", all_results_np)
+    np.save(f"./Results_abe_test/{args.function}_{filename}", all_results_np)
 
-    print(f"Results saved to ./Results_abe_25/{args.function}_{filename}")
+    print(f"Results saved to ./Results_abe_test/{args.function}_{filename}")
