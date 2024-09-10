@@ -97,5 +97,5 @@ def process_datasets(base_path):
         plot_metrics(file_paths, output_dir, function_name)
 
 if __name__ == "__main__":
-    base_path = './Results_abe_corrected'  
+    base_path = '.'  
     process_datasets(base_path)

@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import pandas as pd
-
+npy_files_path = '/Users/anand/Desktop/ABE-BO/Results_abe/NPY_files/'
+print("NPY files directory exists:", os.path.exists(npy_files_path))
+print("Contents of NPY files directory:", os.listdir(npy_files_path))
 def process_file(file_path):
     try:
         data = np.load(file_path, allow_pickle=True)
@@ -20,10 +22,14 @@ def plot_ensemble_gap_metric():
         'GPHedge_bandit': [],
         'ABE': []  # This will contain the least risk ABE variant
     }
-
-    for file in os.listdir('.'):
+    npy_files_path = '/Users/anand/Desktop/ABE-BO/Results_abe/NPY_files/'
+    print(f"Searching for .npy files in: {npy_files_path}")
+    
+    for file in os.listdir(npy_files_path):
         if file.endswith('.npy'):
-            file_path = os.path.join('.', file)
+            file_path = os.path.join(npy_files_path, file)
+            print(f"Processing file: {file}")
+            
             if 'base' in file.lower():
                 data_dict['base'].extend(process_file(file_path))
             elif 'gphedge_random' in file.lower():
@@ -32,48 +38,61 @@ def plot_ensemble_gap_metric():
                 data_dict['GPHedge_bandit'].extend(process_file(file_path))
             elif 'gphedge_abe_least_risk' in file.lower():
                 data_dict['ABE'].extend(process_file(file_path))
-
+            else:
+                print(f"File {file} doesn't match any category")
+    
+    print("Data collected:")
+    for key, value in data_dict.items():
+        print(f"{key}: {len(value)} data points")
+    
+    if all(len(v) == 0 for v in data_dict.values()):
+        print("No data was collected. Check file naming or processing.")
+        return
+    
     df = pd.DataFrame({k: pd.Series(v) for k, v in data_dict.items()})
-
-    y_label_map = {
+    print("DataFrame created with shape:", df.shape)
+    
+    x_label_map = { 
         'base': 'Standard\nBO',
-        'GPHedge_random': 'GPHedge\nRandom',
-        'GPHedge_bandit': 'GPHedge\nBandit',
+        'GPHedge_random': 'MA\nRandom',
+        'GPHedge_bandit': 'MA\nBandit',
         'ABE': 'ABE-BO'
     }
-
-    plt.figure(figsize=(8, 10))  # Adjusted figure size
+    
+    plt.figure(figsize=(10, 8))  # Adjusted figure size
     sns.set_style("whitegrid")
     sns.set_context("paper", font_scale=1.5)
-
     n_colors = len(data_dict)
     palette = sns.color_palette("rocket", n_colors)
     sns.set_palette(palette)
-
-    ax = sns.boxplot(data=df, orient='h', showfliers=False, width=0.6, order=data_dict.keys())
-    plt.xlabel("Final Gap Metric", fontsize=22, fontweight='bold')
-    plt.ylabel("")
-
-    ax.set_yticklabels([y_label_map.get(label.get_text(), label.get_text()) for label in ax.get_yticklabels()],
-                       rotation=0, va='center', fontsize=18, fontweight='bold')
-
-    for tick in ax.get_yticklabels():
-        tick.set_x(-0.01)
-
-    # plt.axhline(y=0.5, color='#777777', linestyle='--', alpha=0.7, linewidth=2)
-    # plt.axhline(y=1.5, color='#777777', linestyle='--', alpha=0.7, linewidth=2)
-
-    # plt.text(plt.xlim()[1] * 1.02, 0, 'Baseline', va='center', ha='left', fontsize=20, fontweight='bold', color='#555555', rotation=-90)
-    # plt.text(plt.xlim()[1] * 1.02, 2, 'GPHedge Variants', va='center', ha='left', fontsize=20, fontweight='bold', color='#555555', rotation=-90)
-
-    ax.tick_params(axis='x', labelsize=18, labelcolor='#555555')
-    for label in ax.get_xticklabels():
+    
+    try:
+        ax = sns.boxplot(data=df, orient='v', showfliers=False, width=0.6, order=data_dict.keys())
+        print("Boxplot created successfully")
+    except Exception as e:
+        print(f"Error creating boxplot: {str(e)}")
+        return
+    
+    # plt.ylabel("Final Gap Metric", fontsize=22, fontweight='bold')
+    # plt.xlabel("")
+    
+    # Use x_label_map for x-axis labels
+    ax.set_xticklabels([x_label_map[label.get_text()] for label in ax.get_xticklabels()],
+                       rotation=0, ha='center', fontsize=18, fontweight='bold')
+    
+    ax.tick_params(axis='y', labelsize=18, labelcolor='#555555')
+    for label in ax.get_yticklabels():
         label.set_fontweight('bold')
-
+    
     plt.tight_layout()
-    plt.savefig('ensemble_gap_metric_boxplot_rotated.png', dpi=300, bbox_inches='tight')
+    
+    try:
+        plt.savefig('ensemble_gap_metric_boxplot.png', dpi=300, bbox_inches='tight')
+        print("Plot saved successfully as 'ensemble_gap_metric_boxplot.png'")
+    except Exception as e:
+        print(f"Error saving plot: {str(e)}")
+    
     plt.close()
-    print("Rotated box plot has been saved as 'ensemble_gap_metric_boxplot_rotated.png'.")
 
 if __name__ == "__main__":
     plot_ensemble_gap_metric()
