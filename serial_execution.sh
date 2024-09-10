@@ -12,9 +12,21 @@ run_and_print() {
 
 
 # Run each script and print the output
-run_and_print ABEBO_NW_std.py --experiments 25 --seed 0 --acquisition LogEI LogPI UCB_0.1 --kernel Matern52 --function Branin --dim 2 --use_abe 
-run_and_print ABEBO_NW_std.py --experiments 25 --seed 0 --acquisition LogEI LogPI UCB_0.9 --kernel Matern52 --function Branin --dim 2 --use_abe 
-run_and_print ABEBO_NW_std.py --experiments 25 --seed 0 --acquisition LogEI UCB_0.9 UCB_0.1 --kernel Matern52 --function Branin --dim 2 --use_abe 
-run_and_print ABEBO_NW_std.py --experiments 25 --seed 0 --acquisition UCB_0.5 UCB_0.9 UCB_0.1 --kernel Matern52 --function Branin --dim 2 --use_abe 
-run_and_print ABEBO_NW_std.py --experiments 25 --seed 0 --acquisition UCB_0.999 UCB_0.001 --kernel Matern52 --function Branin --dim 2 --use_abe 
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Branin --dim 2 --use_abe 
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Branin --dim 2 --acq_weight bandit
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Branin --dim 2 --acq_weight random
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 42 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Hartmann --dim 6 --use_abe 
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 42 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Hartmann --dim 6 --acq_weight bandit
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 42 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Hartmann --dim 6 --acq_weight random
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function DropWave --dim 2 --use_abe 
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function DropWave --dim 2 --acq_weight bandit
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function DropWave --dim 2 --acq_weight random
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Cosine8 --dim 8 --use_abe 
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Cosine8 --dim 8 --acq_weight bandit
+run_and_print ABEBO_NW_std.py --experiments 20 --seed 0 --acquisition LogEI LogPI UCB_0.1 UCB_0.3 UCB_0.7 UCB_0.9 --kernel Matern52 --function Cosine8 --dim 8 --acq_weight random
+
+run_and_print baseline.py --experiments 20 --seed 0 --acquisition LogEI --kernel Matern52 --function Branin --dim 2
+run_and_print baseline.py --experiments 20 --seed 42 --acquisition LogEI --kernel Matern52 --function Hartmann --dim 6
+run_and_print baseline.py --experiments 20 --seed 0 --acquisition LogEI --kernel Matern52 --function DropWave --dim 2
+run_and_print baseline.py --experiments 20 --seed 0 --acquisition LogEI --kernel Matern52 --function Cosine8 --dim 8
 echo "Execution complete."

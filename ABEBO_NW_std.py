@@ -313,7 +313,7 @@ def run_experiments(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='BoTorch Bayesian Optimization')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--acquisition', nargs='+', default=['LogEI', 'LogPI', 'UCB_0.1'], 
+    parser.add_argument('--acquisition', nargs='+', default=['LogEI', 'LogPI', 'UCB_0.1', 'UCB_0.3', 'UCB_0.7', 'UCB_0.9'], 
                         help='List of acquisition functions to use. For UCB, use format UCB_beta (e.g., UCB_0.1)')
     parser.add_argument('--kernel', type=str, default='Matern52', 
                         choices=['Matern52', 'RBF', 'Matern32', 'RFF'],
@@ -340,13 +340,13 @@ if __name__ == "__main__":
 
     # Convert to numpy array and save
     all_results_np = np.array(all_results, dtype=object)
-    os.makedirs(f"./Results_abe_std", exist_ok=True)
+    os.makedirs(f"./Results_abe_10", exist_ok=True)
     
     if args.use_abe:
-        filename = f"GPHedge_abe_least_risk.npy"
+        filename = f"GPHedge_abe_least_risk"
     else:
-        filename = f"GPHedge_{args.acq_weight}.npy"
-    np.save(f"./Results_abe_std/{args.function}_{filename}_{acquisition_str}", all_results_np)
+        filename = f"GPHedge_{args.acq_weight}"
+    np.save(f"./Results_abe_10/{args.function}_{filename}.npy", all_results_np)
     # np.save(f"./Results_abe_std/{args.function}_{filename}", all_results_np)
 
-    print(f"Results saved to ./Results_abe_std/{args.function}_{filename}_{acquisition_str}.npy")
+    print(f"Results saved to ./Results_abe_10/{args.function}_{filename}.npy")
