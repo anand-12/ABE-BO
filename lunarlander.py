@@ -14,7 +14,6 @@ from botorch.acquisition import (
 from scipy.stats import multivariate_t
 from botorch.acquisition.analytic import LogProbabilityOfImprovement
 from botorch.optim import optimize_acqf
-from botorch_test_functions import setup_test_function, true_maxima
 from botorch.utils.sampling import draw_sobol_samples
 from gpytorch.kernels import MaternKernel, RBFKernel, ScaleKernel, RFFKernel
 from botorch.acquisition.analytic import PosteriorMean
@@ -24,14 +23,44 @@ import random
 import os
 import time
 import gpytorch
+import gym
 
 warnings.filterwarnings("ignore")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 dtype = torch.float64
 
-def gap_metric(f_start, f_current, f_star):
-    return np.abs((f_start - f_current) / (f_start - f_star))
+def evaluate_policy(policy_params, env, n_episodes=10, max_steps=1000):
+    total_rewards = []
+    obs_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+    policy_params = policy_params.reshape(action_dim, obs_dim)
+    
+    for _ in range(n_episodes):
+        state, _ = env.reset()
+        done = False
+        episode_reward = 0
+        for _ in range(max_steps):
+            action = np.argmax(np.dot(policy_params, state))
+            state, reward, done, _, _ = env.step(action)
+            episode_reward += reward
+            if done:
+                break
+        total_rewards.append(-1.0*episode_reward/n_episodes)
+    return total_rewards
+
+def lunarlander_objective(X):
+    env = gym.make('LunarLander-v2')
+    # print(f"Evaluating {len(X)} policies")
+    all_rewards = []
+    n_episodes = 10
+    for x in X:
+        # print(f"Evaluating policy: {x}")
+        rewards = evaluate_policy(x.cpu().numpy(), env)
+        all_rewards.append(rewards)
+        print(f"Policy evaluation complete. Mean Reward: {np.mean(rewards):.2f}")
+    env.close()
+    return torch.tensor([np.mean(r) for r in all_rewards], dtype=dtype, device=device).unsqueeze(-1), all_rewards
 
 class ABEBO:
     def __init__(self, bounds, acquisition_functions):
@@ -59,7 +88,7 @@ class ABEBO:
         S = torch.cov(losses.T) if m > 1 else torch.var(losses).unsqueeze(0).unsqueeze(0)
         T_m = self.T0 + m * S + (self.kappa0 * m / kappa_m) * torch.outer(losses_mean - self.r0, losses_mean - self.r0)
         
-        dof = float(nu_m - self.d + 1)  # Convert to scalar
+        dof = float(nu_m - self.d + 1)
         loc = r_m
         scale = T_m / (kappa_m * dof)
         
@@ -94,7 +123,6 @@ class ABEBO:
             
             acq_value = acq(candidates)
             
-            
             if af in ['LogEI', 'LogPI']:
                 acq_value = torch.exp(acq_value) + 1e-10  
             elif af == 'UCB':
@@ -110,8 +138,6 @@ class ABEBO:
         acq_values = (acq_values - acq_values.min()) / (acq_values.max() - acq_values.min() + 1e-10)
         
         losses = -acq_values.squeeze()
-        
-        
         
         dof, loc, scale = self.student_t_posterior(losses)
         weights = self.compute_abe_weights(dof, loc, scale)
@@ -134,12 +160,10 @@ class ABEBO:
         return loc + z * torch.sqrt(torch.diag(scale) * dof / chi2)
 
     def compute_abe_weights(self, dof, loc, scale):
-        n_samples = 10000
-        
+        n_samples = 1000
         
         loc_np = loc.cpu().detach().numpy()
         scale_np = scale.cpu().detach().numpy()
-        
         
         risk_samples = multivariate_t.rvs(df=dof, loc=loc_np, shape=scale_np, size=n_samples)
         risk_samples = torch.tensor(risk_samples, dtype=self.dtype, device=self.device)
@@ -151,12 +175,6 @@ class ABEBO:
         
         return weights / n_samples
 
-    def ensemble_decision(self, candidates, weights):
-        weighted_sum = torch.zeros_like(candidates[0])
-        for candidate, weight in zip(candidates, weights):
-            weighted_sum += weight * candidate
-        return weighted_sum
-    
 def get_next_points(train_X, train_Y, best_train_Y, bounds, acq_functions, kernel, n_points=1, gains=None, acq_weight='bandit', use_abe=False, abe_optimizer=None):
     base_kernel = {
         'Matern52': MaternKernel(nu=2.5, ard_num_dims=train_X.shape[-1]),
@@ -229,33 +247,31 @@ def get_next_points(train_X, train_Y, best_train_Y, bounds, acq_functions, kerne
         candidates = candidates_list[chosen_acq_index]
 
     return candidates, chosen_acq_index, single_model
+
 def bayesian_optimization(args):
     num_iterations = 100
-    initial_points = int(0.1 * num_iterations)
-    objective, bounds = setup_test_function(args.function, dim=args.dim)
-    bounds = bounds.to(dtype=dtype, device=device)
+    initial_points = 10
+    env = gym.make('LunarLander-v2')
+    obs_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+    bounds = torch.tensor([[-1.0] * (obs_dim * action_dim), [1.0] * (obs_dim * action_dim)], dtype=dtype, device=device)
 
     # Draw initial points
     train_X = draw_sobol_samples(bounds=bounds, n=initial_points, q=1).squeeze(1)
-    train_Y = objective(train_X).unsqueeze(-1)
+    train_Y, all_rewards = lunarlander_objective(train_X)
 
-    best_init_y = train_Y.max().item()
-    best_train_Y = best_init_y
-
-    true_max = true_maxima[args.function]
+    best_train_Y = train_Y.max().item()
 
     gains = np.zeros(len(args.acquisition))
     max_values = [best_train_Y]
-    gap_metrics = [gap_metric(best_init_y, best_init_y, true_max)]
-    simple_regrets = [true_max - best_train_Y]
-    cumulative_regrets = [true_max - best_train_Y]
+    all_episodes_rewards = all_rewards
     chosen_acq_functions = []
     kernel_names = []
 
     abe_optimizer = ABEBO(bounds, args.acquisition) if args.use_abe else None
 
     for i in range(num_iterations):
-        print(f"Running iteration {i+1}/{num_iterations}, Best value = {best_train_Y:.4f}")
+        print(f"Running iteration {i+1}/{num_iterations}, Best value so far = {best_train_Y:.4f}")
 
         fit_bounds = torch.stack([torch.min(train_X, 0)[0], torch.max(train_X, 0)[0]])
 
@@ -272,7 +288,7 @@ def bayesian_optimization(args):
 
         # Unnormalize the candidates
         new_candidates = unnormalize(new_candidates_normalized, bounds=fit_bounds)
-        new_Y = objective(new_candidates).unsqueeze(-1)
+        new_Y, new_rewards = lunarlander_objective(new_candidates)
 
         train_X = torch.cat([train_X, new_candidates])
         train_Y = torch.cat([train_Y, new_Y])
@@ -280,9 +296,7 @@ def bayesian_optimization(args):
         best_train_Y = train_Y.max().item()
 
         max_values.append(best_train_Y)
-        gap_metrics.append(gap_metric(best_init_y, best_train_Y, true_max))
-        simple_regrets.append(true_max - best_train_Y)
-        cumulative_regrets.append(cumulative_regrets[-1] + (true_max - best_train_Y))
+        all_episodes_rewards.extend(new_rewards)
         chosen_acq_functions.append(args.acquisition[chosen_acq_index])
         kernel_names.append(args.kernel)
 
@@ -290,7 +304,7 @@ def bayesian_optimization(args):
         reward = posterior_mean.mean().item()
         gains[chosen_acq_index] += reward
 
-    return max_values, gap_metrics, simple_regrets, cumulative_regrets, chosen_acq_functions, kernel_names
+    return max_values, all_episodes_rewards, chosen_acq_functions, kernel_names
 
 def run_experiments(args):
     all_results = []
@@ -301,17 +315,17 @@ def run_experiments(args):
         random.seed(seed)
 
         start_time = time.time()
-        max_values, gap_metrics, simple_regrets, cumulative_regrets, chosen_acq_functions, kernel_names = bayesian_optimization(args)
+        max_values, all_episodes_rewards, chosen_acq_functions, kernel_names = bayesian_optimization(args)
         end_time = time.time()
 
         experiment_time = end_time - start_time
-        all_results.append([max_values, gap_metrics, simple_regrets, cumulative_regrets, experiment_time, chosen_acq_functions, kernel_names])
-        print(f"Experiment {seed} for portfolio completed in {experiment_time:.2f} seconds")
+        all_results.append([max_values, all_episodes_rewards, experiment_time, chosen_acq_functions, kernel_names])
+        print(f"Experiment {seed} completed in {experiment_time:.2f} seconds")
 
     return all_results
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='BoTorch Bayesian Optimization')
+    parser = argparse.ArgumentParser(description='BoTorch Bayesian Optimization for LunarLander')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--acquisition', nargs='+', default=['LogEI', 'LogPI', 'UCB_0.1', 'UCB_0.3', 'UCB_0.7', 'UCB_0.9'], 
                         help='List of acquisition functions to use. For UCB, use format UCB_beta (e.g., UCB_0.1)')
@@ -319,34 +333,24 @@ if __name__ == "__main__":
                         choices=['Matern52', 'RBF', 'Matern32', 'RFF'],
                         help='GP kernel to use')
     parser.add_argument('--experiments', type=int, default=1, help='Number of experiments to run')
-    parser.add_argument('--function', type=str, default='Hartmann', choices=list(true_maxima.keys()),
-                        help='Test function to optimize')
-    parser.add_argument('--dim', type=int, default=6, help='Dimensionality of the problem (for functions that support variable dimensions)')
     parser.add_argument('--acq_weight', type=str, default='bandit', choices=['random', 'bandit'],
                         help="Method for selecting acquisition function: random or bandit")
     parser.add_argument('--use_abe', action='store_true', help='Use Improved Approximate Bayesian Ensembles with least risk strategy')
     args = parser.parse_args()
-    print(args.acquisition)
-    print(type(args.acquisition))
-    for acq in args.acquisition:
-        if acq.startswith('UCB'):
-            try:
-                beta = float(acq.split('_')[1])
-            except (IndexError, ValueError):
-                parser.error(f"Invalid UCB format: {acq}. Use format UCB_beta (e.g., UCB_0.1)")
 
-    acquisition_str = "_".join(args.acquisition)
+    print("Acquisition functions:", args.acquisition)
+
     all_results = run_experiments(args)
 
-    
+    # Save results
     all_results_np = np.array(all_results, dtype=object)
-    os.makedirs(f"./Results_abe_10", exist_ok=True)
+    os.makedirs("./Results_LunarLander", exist_ok=True)
     
     if args.use_abe:
         filename = f"GPHedge_abe_least_risk"
     else:
-        filename = f"GPHedge_{args.acq_weight}"
-    np.save(f"./Results_abe_10/{args.function}_{filename}.npy", all_results_np)
-    
+        filename = f"GPHedge_base"
+    np.save(f"./Results_LunarLander/LunarLander_{filename}.npy", all_results_np)
 
-    print(f"Results saved to ./Results_abe_10/{args.function}_{filename}.npy")
+    print(f"Results saved to ./Results_LunarLander/LunarLander_{filename}.npy")
+    print("Results include rewards for all episodes in each iteration.")

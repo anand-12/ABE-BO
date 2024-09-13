@@ -53,10 +53,10 @@ def bayesian_optimization(n_iterations, seed, acq_func_name, kernel_name, test_f
     acq_func_names = []
 
     for iteration in range(n_iterations):
-        # Compute bounds for normalization
+        
         fit_bounds = torch.stack([torch.min(train_X, 0)[0], torch.max(train_X, 0)[0]])
 
-        # Normalize inputs and standardize outputs
+        
         train_X_normalized = normalize(train_X, bounds=fit_bounds)
         train_Y_standardized = standardize(train_Y)
 
@@ -65,7 +65,7 @@ def bayesian_optimization(n_iterations, seed, acq_func_name, kernel_name, test_f
         with gpytorch.settings.cholesky_jitter(1e-1):
             fit_gpytorch_mll(mll)
 
-        # Standardize best observed value
+        
         best_f = (best_observed_value - train_Y.mean()) / train_Y.std()
 
         acq_func = {
@@ -77,7 +77,7 @@ def bayesian_optimization(n_iterations, seed, acq_func_name, kernel_name, test_f
             'PM': PosteriorMean(model=model)
         }[acq_func_name]
 
-        # Optimize acquisition function in normalized space
+        
         new_x_normalized, _ = optimize_acqf(
             acq_function=acq_func, 
             bounds=normalize(bounds, fit_bounds),
@@ -86,7 +86,7 @@ def bayesian_optimization(n_iterations, seed, acq_func_name, kernel_name, test_f
             raw_samples=50
         )
 
-        # Unnormalize new_x before evaluating objective
+        
         new_x = unnormalize(new_x_normalized, bounds=fit_bounds)
         new_y = objective(new_x).unsqueeze(-1)
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     all_results = run_experiments(args)
 
-    # Save results as .npy file
+    
     all_results_np = np.array(all_results, dtype=object)
     os.makedirs(f"./{args.function}_2", exist_ok=True)
     np.save(f"./Results_abe_10/{args.function}_base.npy", all_results_np)
