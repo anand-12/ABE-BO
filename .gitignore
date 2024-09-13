@@ -1,2 +1,10 @@
+# Ignore NumPy array files
 *.npy
+
+# Ignore PNG image files
 *.png
+
+# Optional: Ignore directories
+# Uncomment the following lines if you want to ignore entire directories
+# npy_files/
+# png_files/
